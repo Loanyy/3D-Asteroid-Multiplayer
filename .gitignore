@@ -1,0 +1,56 @@
+# ===========================================
+# .gitignore for SDL2 + Visual Studio C++ project
+# Teacher starter kit: SDL2_VS_Win_x64_3D
+# ===========================================
+
+# --- Visual Studio build output ---
+Debug/
+Release/
+x86/
+
+# x64 build outputs (but NOT SDL2.dll which is needed at runtime)
+x64/Debug/*.exe
+x64/Debug/*.obj
+x64/Debug/*.pdb
+x64/Debug/*.ilk
+x64/Debug/*.log
+x64/Debug/*.tlog/
+x64/Debug/*.idb
+x64/Debug/*.ipdb
+x64/Debug/*.iobj
+x64/Debug/*.pch
+x64/Debug/*.res
+x64/Debug/*.lastbuildstate
+x64/Debug/*.recipe
+x64/Debug/*.FileListAbsolute.txt
+x64/Release/
+
+# --- Visual Studio user/local files ---
+*.vcxproj.user
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+
+# --- Visual Studio cache/temp ---
+.vs/
+ipch/
+*.aps
+*.ncb
+*.opensdf
+*.sdf
+*.cachefile
+*.VC.db
+*.VC.VC.opendb
+
+# --- Compiled binaries ---
+*.obj
+*.o
+*.pch
+*.ilk
+
+# --- OS junk ---
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+.DS_Store
