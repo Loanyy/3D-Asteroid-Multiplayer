@@ -148,10 +148,15 @@
     <ClInclude Include="Constants.h" />
     <ClInclude Include="Entities.h" />
     <ClInclude Include="Game.h" />
+    <ClInclude Include="network.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="Game.cpp" />
     <ClCompile Include="Main.cpp" />
+    <ClCompile Include="network.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="server.py" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
