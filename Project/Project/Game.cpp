@@ -24,6 +24,9 @@ Game::Game() {
     isHost = false;
     joinActive = false;
     lobbyReady = false;
+    opponentConnected = false;
+    strcpy(opponentName, "");
+    netSendTimer = 0.0f;
     lastMouseX = lastMouseY = -1;
     currentState = STATE_MAIN_MENU;
     roundNumber = 0;
@@ -173,6 +176,8 @@ void Game::SetState(GameStateEnum s) {
         lobbyReady = false;
         joinActive = false;
         lobbyChoice = -1;
+        opponentConnected = false;
+        strcpy(opponentName, "");
 
         strcpy(nickname, "");
         nicknameLen = 0;
@@ -808,6 +813,8 @@ void Game::NormalKeys(unsigned char key, int state) {
 void Game::SpecialKeys(int key, int state) {
     (void)key; (void)state;
 
+    (void)key; (void)state;
+
     if (currentState == STATE_MAIN_MENU) {
         if (key == SDLK_UP)   menuSelection = (menuSelection + 3) % 4;
         if (key == SDLK_DOWN) menuSelection = (menuSelection + 1) % 4;
@@ -987,14 +994,32 @@ void Game::UpdatePlaying(float dt) {
         }
     }
 
-    // Projectile vs Asteroid
+    // Projectile vs Asteroid (substep)
     for (int i = 0; i < (int)projectiles.size(); i++) {
         Projectile& pr = projectiles[i];
+        bool removed = false;
         for (int j = 0; j < (int)asteroids.size(); j++) {
             Asteroid& a = asteroids[j];
-            float dx = pr.x - a.x, dz = pr.z - a.z;
-            float dist = sqrtf(dx * dx + dz * dz);
-            if (dist < a.radius * 1.5f + PROJECTILE_RADIUS) {
+
+            float px = pr.x - pr.vx * dt;
+            float pz = pr.z - pr.vz * dt;
+            float stepDist = sqrtf(pr.vx * pr.vx + pr.vz * pr.vz) * dt;
+            int steps = (int)(stepDist / (a.radius * 0.5f)) + 1;
+            if (steps > 20) steps = 20;
+
+            bool hit = false;
+            for (int s = 0; s <= steps; s++) {
+                float frac = (steps == 0) ? 1.0f : (float)s / (float)steps;
+                float cx = px + (pr.x - px) * frac;
+                float cz = pz + (pr.z - pz) * frac;
+                float dx = cx - a.x, dz = cz - a.z;
+                if (sqrtf(dx * dx + dz * dz) < a.radius * 1.5f + PROJECTILE_RADIUS) {
+                    hit = true;
+                    break;
+                }
+            }
+
+            if (hit) {
                 if (a.size == 0) {
                     players[pr.ownerId].score += SCORE_BIG_SPLIT;
                     float ax = a.x, az = a.z;
@@ -1015,27 +1040,43 @@ void Game::UpdatePlaying(float dt) {
                 }
                 projectiles.erase(projectiles.begin() + i);
                 i--;
+                removed = true;
                 break;
             }
         }
     }
 
-    // Projectile vs Player
+    // Projectile vs Player (substep to prevent tunneling)
     for (int i = 0; i < (int)projectiles.size(); i++) {
         Projectile& pr = projectiles[i];
+        bool removed = false;
         for (int pid = 0; pid < 2; pid++) {
             if (pr.ownerId == pid) continue;
             Player& t = players[pid];
             if (!t.alive || t.invulnTime > 0.0f) continue;
-            float dx = pr.x - t.x, dz = pr.z - t.z;
-            if (sqrtf(dx * dx + dz * dz) < PLAYER_RADIUS + PROJECTILE_RADIUS) {
-                t.lives--;
-                t.invulnTime = PLAYER_INVULN_TIME;
-                if (t.lives <= 0) t.alive = false;
-                projectiles.erase(projectiles.begin() + i);
-                i--;
-                break;
+
+            float px = pr.x - pr.vx * dt;
+            float pz = pr.z - pr.vz * dt;
+            float stepDist = sqrtf(pr.vx * pr.vx + pr.vz * pr.vz) * dt;
+            int steps = (int)(stepDist / (PLAYER_RADIUS * 0.5f)) + 1;
+            if (steps > 20) steps = 20;
+
+            for (int s = 0; s <= steps; s++) {
+                float frac = (steps == 0) ? 1.0f : (float)s / (float)steps;
+                float cx = px + (pr.x - px) * frac;
+                float cz = pz + (pr.z - pz) * frac;
+                float dx = cx - t.x, dz = cz - t.z;
+                if (sqrtf(dx * dx + dz * dz) < PLAYER_RADIUS + PROJECTILE_RADIUS) {
+                    t.lives--;
+                    t.invulnTime = PLAYER_INVULN_TIME;
+                    if (t.lives <= 0) t.alive = false;
+                    projectiles.erase(projectiles.begin() + i);
+                    i--;
+                    removed = true;
+                    break;
+                }
             }
+            if (removed) break;
         }
     }
 
@@ -1121,18 +1162,30 @@ void Game::UpdateRoundEnd(float dt) {
 InputState Game::BuildInputState(int id) {
     InputState inp;
     inp.playerId = id;
-    if (id == 0) {
-        inp.rotateLeft = keys['a'];
-        inp.rotateRight = keys['d'];
-        inp.thrustForward = keys['w'];
-        inp.shoot = keys[' '];
-    }
-    else {
-        if (isMultiplayer && NetGetPlayerId() == 0) {
+
+    if (isMultiplayer) {
+        if (id == NetGetPlayerId()) {
+            // Local player always uses WASD
+            inp.rotateLeft = keys['a'];
+            inp.rotateRight = keys['d'];
+            inp.thrustForward = keys['w'];
+            inp.shoot = keys[' '];
+        }
+        else {
+            // Remote player input comes from network
             inp.thrustForward = remThrust;
             inp.rotateLeft = remLeft;
             inp.rotateRight = remRight;
             inp.shoot = remShoot;
+        }
+    }
+    else {
+        // Local singleplayer: P1 = WASD, P2 = IJKL
+        if (id == 0) {
+            inp.rotateLeft = keys['a'];
+            inp.rotateRight = keys['d'];
+            inp.thrustForward = keys['w'];
+            inp.shoot = keys[' '];
         }
         else {
             inp.rotateLeft = keys['j'];
@@ -1257,22 +1310,38 @@ void Game::ApplyGameState(const GameState& gs) {
 void Game::Update(float dt) {
     switch (currentState) {
     case STATE_LOBBY:
-        // Verifica daca ambii jucatori s-au conectat
-        if (isMultiplayer && NetIsStarted() && !lobbyReady) {
-            lobbyReady = true;
-            ResetMatch();
-            SetState(STATE_PLAYING);
+        if (isMultiplayer && NetIsConnected() && !opponentConnected) {
+            // Check if opponent sent their nickname
+            bool dummy1, dummy2, dummy3, dummy4;
+            if (NetGetInput(dummy1, dummy2, dummy3, dummy4)) {
+                // Will be replaced with proper nickname recv later
+            }
+            if (NetIsStarted()) {
+                opponentConnected = true;
+                if (NetGetPlayerId() == 0) {
+                    // Host: send our nickname to opponent
+                    NetSendInput(false, false, false, false); // placeholder
+                    strcpy(player2Name, "Opponent");
+                }
+                else {
+                    strcpy(player1Name, "Opponent");
+                }
+            }
         }
         break;
 
     case STATE_PLAYING:
         if (isMultiplayer) {
             if (NetGetPlayerId() == 0) {
-                // HOST: citeste input JOINER, ruleaza logica, trimite state
+                // HOST: read joiner input, run logic, send state at 30Hz
                 NetGetInput(remThrust, remLeft, remRight, remShoot);
                 UpdatePlaying(dt);
-                GameState gs = GetGameState();
-                NetSendState(gs, asteroids, projectiles);
+                netSendTimer += dt;
+                if (netSendTimer >= 1.0f / 30.0f) {
+                    netSendTimer = 0.0f;
+                    GameState gs = GetGameState();
+                    NetSendState(gs, asteroids, projectiles);
+                }
             }
             else {
                 // JOINER: trimite input, primeste state de la HOST
