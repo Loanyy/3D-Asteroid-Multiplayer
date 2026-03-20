@@ -18,6 +18,10 @@ static std::atomic<bool> g_started{ false };
 static std::mutex        g_mu;
 static std::string       g_lastMsg;
 static bool              g_hasMsg = false;
+static std::string       g_nickMsg;
+static bool              g_hasNick = false;
+
+static bool g_remoteReady = false;
 
 static std::string RecvLine() {
     std::string line;
@@ -74,7 +78,15 @@ static void RecvThread() {
                 g_started = true;
             if (line.find("player_id") != std::string::npos && g_pid == -1)
                 g_pid = GetI(line, "player_id");
-            if (line.find("\"input\"") != std::string::npos ||
+            if (line.find("\"ready\"") != std::string::npos) {
+                g_remoteReady = true;
+            }
+            if (line.find("\"nickname\"") != std::string::npos) {
+                std::lock_guard<std::mutex> lk(g_mu);
+                g_nickMsg = line;
+                g_hasNick = true;
+            }
+            else if (line.find("\"input\"") != std::string::npos ||
                 line.find("\"state\"") != std::string::npos) {
                 std::lock_guard<std::mutex> lk(g_mu);
                 g_lastMsg = line;
@@ -254,4 +266,28 @@ bool NetGetState(GameState& gs,
         p++;
     }
     return true;
+}
+
+void NetSendNickname(const char* name) {
+    char buf[128];
+    snprintf(buf, sizeof(buf), "{\"type\":\"nickname\",\"name\":\"%s\"}", name);
+    SendLine(buf);
+}
+
+bool NetGetNickname(char* name, int maxLen) {
+    std::lock_guard<std::mutex> lk(g_mu);
+    if (!g_hasNick) return false;
+    g_hasNick = false;
+    std::string n = GetS(g_nickMsg, "name");
+    strncpy(name, n.c_str(), maxLen - 1);
+    name[maxLen - 1] = '\0';
+    return true;
+}
+
+void NetSendReady() {
+    SendLine("{\"type\":\"ready\"}");
+}
+
+bool NetGetReady() {
+    return g_remoteReady;
 }
