@@ -171,6 +171,7 @@ void Game::DrawText(const char* text, float x, float y, TTF_Font* font,
 void Game::SetState(GameStateEnum s) {
     currentState = s;
 
+
     if (s == STATE_MAIN_MENU) {
         strcpy(lobbyCode, "");
         strcpy(lobbyCodeInput, "");
@@ -184,6 +185,11 @@ void Game::SetState(GameStateEnum s) {
         localReady = false;
         remoteReady = false;
         nicknameSent = false;
+
+        if (isMultiplayer) {
+            NetDisconnect();
+            isMultiplayer = false;
+        }
 
         strcpy(nickname, "");
         nicknameLen = 0;
@@ -1487,17 +1493,13 @@ void Game::Update(float dt) {
                 }
             }
             else {
-                // JOINER: trimite input, primeste state de la HOST
-                InputState inp = BuildInputState(1);
-                NetSendInput(inp.thrustForward, inp.rotateLeft,
-                    inp.rotateRight, inp.shoot);
-                GameState gs;
-                std::vector<Asteroid> ast;
-                std::vector<Projectile> prj;
-                if (NetGetState(gs, ast, prj)) {
-                    ApplyGameState(gs);
-                    asteroids = ast;
-                    projectiles = prj;
+                // JOINER: send input at 30Hz, receive state every frame
+                netSendTimer += dt;
+                if (netSendTimer >= 1.0f / 30.0f) {
+                    netSendTimer = 0.0f;
+                    InputState inp = BuildInputState(1);
+                    NetSendInput(inp.thrustForward, inp.rotateLeft,
+                        inp.rotateRight, inp.shoot);
                 }
             }
         }

@@ -119,15 +119,19 @@ bool NetConnect(const char* ip, int port) {
     g_remoteReady = false;
     g_hasNick = false;
     g_hasMsg = false;
+    g_lastMsg.clear();
+    g_nickMsg.clear();
+
     std::thread(RecvThread).detach();
     return true;
 }
 
 void NetDisconnect() {
     g_conn = false;
-    closesocket(g_sock);
-    g_sock = INVALID_SOCKET;
-    WSACleanup();
+    if (g_sock != INVALID_SOCKET) {
+        closesocket(g_sock);
+        g_sock = INVALID_SOCKET;
+    }
 }
 
 bool NetIsConnected() { return g_conn; }
