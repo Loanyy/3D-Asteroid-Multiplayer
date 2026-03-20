@@ -17,3 +17,7 @@ bool NetGetInput(bool& thrust, bool& left, bool& right, bool& shoot);
 bool NetGetState(GameState& gs,
     std::vector<Asteroid>& ast,
     std::vector<Projectile>& prj);
+void NetSendNickname(const char* name);
+bool NetGetNickname(char* name, int maxLen);
+void NetSendReady();
+bool NetGetReady();

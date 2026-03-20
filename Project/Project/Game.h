@@ -75,6 +75,9 @@ public:
     bool joinActive;
     bool lobbyReady;
     bool opponentConnected;
+    bool localReady;
+    bool remoteReady;
+    bool nicknameSent;
     char opponentName[32];
     float netSendTimer;
     bool keys[256];

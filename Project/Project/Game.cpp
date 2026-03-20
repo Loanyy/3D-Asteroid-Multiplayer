@@ -25,6 +25,9 @@ Game::Game() {
     joinActive = false;
     lobbyReady = false;
     opponentConnected = false;
+    localReady = false;
+    remoteReady = false;
+    nicknameSent = false;
     strcpy(opponentName, "");
     netSendTimer = 0.0f;
     lastMouseX = lastMouseY = -1;
@@ -178,6 +181,9 @@ void Game::SetState(GameStateEnum s) {
         lobbyChoice = -1;
         opponentConnected = false;
         strcpy(opponentName, "");
+        localReady = false;
+        remoteReady = false;
+        nicknameSent = false;
 
         strcpy(nickname, "");
         nicknameLen = 0;
@@ -374,24 +380,25 @@ void Game::DrawLobby() {
     Begin2D(mW, mH);
     DrawRect2D(0, 0, mW, mH, 5, 5, 20);
 
-    // Player name
     char welcome[64];
-    sprintf(welcome, "Welcome, %s", player1Name);
+    sprintf(welcome, "Welcome, %s", nickname);
     int ww, wh;
     TTF_SizeText(fontMedium, welcome, &ww, &wh);
     DrawText(welcome, (mW - ww) * 0.5f, mH * 0.05f, fontMedium, 0, 255, 255);
 
-    // HOST button
     float bx = mW * 0.25f;
     float bw = mW * 0.5f;
     float bh = mH * 0.08f;
-    float hostY = mH * 0.2f;
-    float joinY = mH * 0.32f;
+    bool mouseMoved = (mMouseX != lastMouseX || mMouseY != lastMouseY);
+    float hostY = mH * 0.15f;
+    float joinY = mH * 0.25f;
     bool hoverHost = (mMouseX >= bx && mMouseX <= bx + bw &&
         mMouseY >= hostY && mMouseY <= hostY + bh);
     bool hoverJoin = (mMouseX >= bx && mMouseX <= bx + bw &&
         mMouseY >= joinY && mMouseY <= joinY + bh);
     bool selHost = hoverHost || (!hoverJoin && lobbyChoice == 0);
+    bool selJoin = hoverJoin || (!hoverHost && lobbyChoice == 1);
+
     DrawRect2D(bx, hostY, bw, bh, selHost ? 80 : 30, selHost ? 120 : 60, selHost ? 200 : 100);
     const char* hostTxt = "HOST GAME";
     int htw, hth;
@@ -399,8 +406,6 @@ void Game::DrawLobby() {
     DrawText(hostTxt, (mW - htw) * 0.5f, hostY + (bh - hth) * 0.5f,
         fontMedium, selHost ? 255 : 150, selHost ? 255 : 150, selHost ? 255 : 150);
 
-    // JOIN button
-    bool selJoin = hoverJoin || (!hoverHost && lobbyChoice == 1);
     DrawRect2D(bx, joinY, bw, bh, selJoin ? 80 : 30, selJoin ? 120 : 60, selJoin ? 200 : 100);
     const char* joinTxt = "JOIN GAME";
     int jtw, jth;
@@ -408,57 +413,145 @@ void Game::DrawLobby() {
     DrawText(joinTxt, (mW - jtw) * 0.5f, joinY + (bh - jth) * 0.5f,
         fontMedium, selJoin ? 255 : 150, selJoin ? 255 : 150, selJoin ? 255 : 150);
 
-    // If HOST selected and code generated
     if (isHost && lobbyCode[0] != '\0') {
-        const char* waitTxt = "LOBBY CODE:";
-        int wtw, wth;
-        TTF_SizeText(fontMedium, waitTxt, &wtw, &wth);
-        DrawText(waitTxt, (mW - wtw) * 0.5f, mH * 0.5f, fontMedium, 200, 200, 200);
+        const char* ipLabel = "YOUR IP:";
+        int ipw, iph;
+        TTF_SizeText(fontSmall, ipLabel, &ipw, &iph);
+        DrawText(ipLabel, (mW - ipw) * 0.5f, mH * 0.38f, fontSmall, 150, 150, 150);
 
         int cw, ch;
         TTF_SizeText(fontLarge, lobbyCode, &cw, &ch);
-        DrawText(lobbyCode, (mW - cw) * 0.5f, mH * 0.58f, fontLarge, 255, 255, 0);
+        DrawText(lobbyCode, (mW - cw) * 0.5f, mH * 0.43f, fontLarge, 255, 255, 0);
 
-        const char* wait2 = "Waiting for opponent...";
-        int w2w, w2h;
-        TTF_SizeText(fontSmall, wait2, &w2w, &w2h);
-        DrawText(wait2, (mW - w2w) * 0.5f, mH * 0.72f, fontSmall, 100, 100, 100);
+        if (opponentConnected) {
+            char connMsg[64];
+            sprintf(connMsg, "%s connected!", player2Name);
+            int cmw, cmh;
+            TTF_SizeText(fontMedium, connMsg, &cmw, &cmh);
+            DrawText(connMsg, (mW - cmw) * 0.5f, mH * 0.56f, fontMedium, 0, 255, 0);
+
+            char readyStatus[128];
+            sprintf(readyStatus, "You: %s  |  %s: %s",
+                localReady ? "READY" : "NOT READY",
+                player2Name,
+                remoteReady ? "READY" : "NOT READY");
+            int rsw, rsh;
+            TTF_SizeText(fontSmall, readyStatus, &rsw, &rsh);
+            DrawText(readyStatus, (mW - rsw) * 0.5f, mH * 0.64f, fontSmall, 180, 180, 180);
+
+            if (!localReady) {
+                float rbx = mW * 0.3f;
+                float rby = mH * 0.72f;
+                float rbw = mW * 0.4f;
+                float rbh = mH * 0.07f;
+                bool hoverReady = (mMouseX >= rbx && mMouseX <= rbx + rbw &&
+                    mMouseY >= rby && mMouseY <= rby + rbh);
+                DrawRect2D(rbx, rby, rbw, rbh,
+                    0, hoverReady ? 180 : 120, 0);
+                const char* rdyTxt = "READY";
+                int rtw, rth;
+                TTF_SizeText(fontMedium, rdyTxt, &rtw, &rth);
+                DrawText(rdyTxt, (mW - rtw) * 0.5f, rby + (rbh - rth) * 0.5f,
+                    fontMedium, 255, 255, 255);
+            }
+
+            if (localReady && remoteReady) {
+                float sbx = mW * 0.3f;
+                float sby = mH * 0.82f;
+                float sbw = mW * 0.4f;
+                float sbh = mH * 0.08f;
+                bool hoverStart = (mMouseX >= sbx && mMouseX <= sbx + sbw &&
+                    mMouseY >= sby && mMouseY <= sby + sbh);
+                DrawRect2D(sbx, sby, sbw, sbh,
+                    0, hoverStart ? 255 : 200, 0);
+                const char* startTxt = "START MATCH";
+                int stw, sth;
+                TTF_SizeText(fontMedium, startTxt, &stw, &sth);
+                DrawText(startTxt, (mW - stw) * 0.5f, sby + (sbh - sth) * 0.5f,
+                    fontMedium, 255, 255, 255);
+            }
+        }
+        else {
+            const char* wait2 = "Waiting for opponent...";
+            int w2w, w2h;
+            TTF_SizeText(fontSmall, wait2, &w2w, &w2h);
+            DrawText(wait2, (mW - w2w) * 0.5f, mH * 0.56f, fontSmall, 100, 100, 100);
+        }
     }
 
-    // If JOIN selected, show code input
     if (joinActive && !isHost) {
-        const char* enterCode = "ENTER LOBBY CODE:";
-        int etw, eth;
-        TTF_SizeText(fontMedium, enterCode, &etw, &eth);
-        DrawText(enterCode, (mW - etw) * 0.5f, mH * 0.5f, fontMedium, 200, 200, 200);
+        if (!opponentConnected) {
+            const char* enterCode = "ENTER HOST IP:";
+            int etw, eth;
+            TTF_SizeText(fontMedium, enterCode, &etw, &eth);
+            DrawText(enterCode, (mW - etw) * 0.5f, mH * 0.38f, fontMedium, 200, 200, 200);
 
-        // Code input box
-        float cbx = mW * 0.3f;
-        float cby = mH * 0.58f;
-        float cbw = mW * 0.4f;
-        float cbh = mH * 0.1f;
-        DrawRect2D(cbx, cby, cbw, cbh, 20, 20, 50);
-        DrawRect2D(cbx + 2, cby + 2, cbw - 4, cbh - 4, 10, 10, 30);
+            float cbx = mW * 0.25f;
+            float cby = mH * 0.46f;
+            float cbw = mW * 0.5f;
+            float cbh = mH * 0.1f;
+            DrawRect2D(cbx, cby, cbw, cbh, 20, 20, 50);
+            DrawRect2D(cbx + 2, cby + 2, cbw - 4, cbh - 4, 10, 10, 30);
 
-        char codeDisp[16];
-        sprintf(codeDisp, "%s_", lobbyCodeInput);
-        int cdw, cdh;
-        TTF_SizeText(fontLarge, codeDisp, &cdw, &cdh);
-        DrawText(codeDisp, (mW - cdw) * 0.5f, cby + (cbh - cdh) * 0.5f, fontLarge, 255, 255, 0);
+            char codeDisp[32];
+            sprintf(codeDisp, "%s_", lobbyCodeInput);
+            int cdw, cdh;
+            TTF_SizeText(fontLarge, codeDisp, &cdw, &cdh);
+            DrawText(codeDisp, (mW - cdw) * 0.5f, cby + (cbh - cdh) * 0.5f, fontLarge, 255, 255, 0);
 
-        const char* codeHint = "6 character code, then press ENTER";
-        int chw, chh;
-        TTF_SizeText(fontSmall, codeHint, &chw, &chh);
-        DrawText(codeHint, (mW - chw) * 0.5f, mH * 0.72f, fontSmall, 100, 100, 100);
+            const char* codeHint = "Type host IP, then press ENTER";
+            int chw, chh;
+            TTF_SizeText(fontSmall, codeHint, &chw, &chh);
+            DrawText(codeHint, (mW - chw) * 0.5f, mH * 0.60f, fontSmall, 100, 100, 100);
+        }
+        else {
+            char connMsg[64];
+            sprintf(connMsg, "Connected to %s!", player1Name);
+            int cmw, cmh;
+            TTF_SizeText(fontMedium, connMsg, &cmw, &cmh);
+            DrawText(connMsg, (mW - cmw) * 0.5f, mH * 0.42f, fontMedium, 0, 255, 0);
+
+            char readyStatus[128];
+            sprintf(readyStatus, "%s: %s  |  You: %s",
+                player1Name,
+                remoteReady ? "READY" : "NOT READY",
+                localReady ? "READY" : "NOT READY");
+            int rsw, rsh;
+            TTF_SizeText(fontSmall, readyStatus, &rsw, &rsh);
+            DrawText(readyStatus, (mW - rsw) * 0.5f, mH * 0.52f, fontSmall, 180, 180, 180);
+
+            if (!localReady) {
+                float rbx = mW * 0.3f;
+                float rby = mH * 0.62f;
+                float rbw = mW * 0.4f;
+                float rbh = mH * 0.07f;
+                bool hoverReady = (mMouseX >= rbx && mMouseX <= rbx + rbw &&
+                    mMouseY >= rby && mMouseY <= rby + rbh);
+                DrawRect2D(rbx, rby, rbw, rbh,
+                    0, hoverReady ? 180 : 120, 0);
+                const char* rdyTxt = "READY";
+                int rtw, rth;
+                TTF_SizeText(fontMedium, rdyTxt, &rtw, &rth);
+                DrawText(rdyTxt, (mW - rtw) * 0.5f, rby + (rbh - rth) * 0.5f,
+                    fontMedium, 255, 255, 255);
+            }
+
+            if (localReady) {
+                const char* waitMsg = "Waiting for host to start...";
+                int wmw, wmh;
+                TTF_SizeText(fontSmall, waitMsg, &wmw, &wmh);
+                DrawText(waitMsg, (mW - wmw) * 0.5f, mH * 0.75f, fontSmall, 100, 100, 100);
+            }
+        }
     }
 
-    // ESC hint
     const char* escHint = "ESC to go back";
     int ew, eh;
     TTF_SizeText(fontSmall, escHint, &ew, &eh);
-    DrawText(escHint, (mW - ew) * 0.5f, mH * 0.9f, fontSmall, 100, 100, 100);
+    DrawText(escHint, (mW - ew) * 0.5f, mH * 0.93f, fontSmall, 100, 100, 100);
 
-
+    lastMouseX = mMouseX;
+    lastMouseY = mMouseY;
 
     End2D();
     SDL_SetWindowTitle(gScreen, "ASTEROID 3D - LOBBY");
@@ -811,7 +904,9 @@ void Game::NormalKeys(unsigned char key, int state) {
 }
 
 void Game::SpecialKeys(int key, int state) {
+
     (void)key; (void)state;
+
     if (currentState == STATE_MAIN_MENU) {
         if (key == SDLK_UP)   menuSelection = (menuSelection + 3) % 4;
         if (key == SDLK_DOWN) menuSelection = (menuSelection + 1) % 4;
@@ -835,7 +930,6 @@ void Game::SpecialKeys(int key, int state) {
 void Game::Mouse(int button, int state, int x, int y) {
     mMouseButton = button; mMouseState = state;
     mMouseX = x; mMouseY = y;
-
     if (currentState == STATE_MAIN_MENU && button == SDL_BUTTON_LEFT && state == SDL_RELEASED) {
         float bx = mW * 0.3f;
         float bw = mW * 0.4f;
@@ -857,14 +951,12 @@ void Game::Mouse(int button, int state, int x, int y) {
             }
         }
     }
-
     if (currentState == STATE_LOBBY && button == SDL_BUTTON_LEFT && state == SDL_RELEASED) {
         float bx = mW * 0.25f;
         float bw = mW * 0.5f;
         float bh = mH * 0.08f;
-        float hostY = mH * 0.2f;
-        float joinY = mH * 0.32f;
-
+        float hostY = mH * 0.15f;
+        float joinY = mH * 0.25f;
         if (x >= bx && x <= bx + bw && y >= hostY && y <= hostY + bh) {
             lobbyChoice = 0;
             joinActive = false;
@@ -872,7 +964,6 @@ void Game::Mouse(int button, int state, int x, int y) {
                 isHost = true;
                 isMultiplayer = true;
                 lobbyReady = false;
-
                 char hostname[256];
                 char hostIP[20] = "127.0.0.1";
                 gethostname(hostname, sizeof(hostname));
@@ -887,12 +978,41 @@ void Game::Mouse(int button, int state, int x, int y) {
                 NetConnect("127.0.0.1");
             }
         }
-
         if (x >= bx && x <= bx + bw && y >= joinY && y <= joinY + bh) {
             lobbyChoice = 1;
             isHost = false;
             strcpy(lobbyCode, "");
             joinActive = true;
+        }
+        if (isHost && opponentConnected && !localReady) {
+            float rbx = mW * 0.3f;
+            float rby = mH * 0.72f;
+            float rbw = mW * 0.4f;
+            float rbh = mH * 0.07f;
+            if (x >= rbx && x <= rbx + rbw && y >= rby && y <= rby + rbh) {
+                localReady = true;
+                NetSendReady();
+            }
+        }
+        if (!isHost && joinActive && opponentConnected && !localReady) {
+            float rbx = mW * 0.3f;
+            float rby = mH * 0.62f;
+            float rbw = mW * 0.4f;
+            float rbh = mH * 0.07f;
+            if (x >= rbx && x <= rbx + rbw && y >= rby && y <= rby + rbh) {
+                localReady = true;
+                NetSendReady();
+            }
+        }
+        if (isHost && localReady && remoteReady) {
+            float sbx = mW * 0.3f;
+            float sby = mH * 0.82f;
+            float sbw = mW * 0.4f;
+            float sbh = mH * 0.08f;
+            if (x >= sbx && x <= sbx + sbw && y >= sby && y <= sby + sbh) {
+                ResetMatch();
+                SetState(STATE_PLAYING);
+            }
         }
     }
 }
@@ -1307,21 +1427,42 @@ void Game::ApplyGameState(const GameState& gs) {
 void Game::Update(float dt) {
     switch (currentState) {
     case STATE_LOBBY:
-        if (isMultiplayer && NetIsConnected() && !opponentConnected) {
-            // Check if opponent sent their nickname
-            bool dummy1, dummy2, dummy3, dummy4;
-            if (NetGetInput(dummy1, dummy2, dummy3, dummy4)) {
-                // Will be replaced with proper nickname recv later
+        if (isMultiplayer && NetIsConnected()) {
+            // Send nickname once when server says START (both connected)
+            if (NetIsStarted() && !nicknameSent) {
+                nicknameSent = true;
+                NetSendNickname(nickname);
             }
-            if (NetIsStarted()) {
-                opponentConnected = true;
-                if (NetGetPlayerId() == 0) {
-                    // Host: send our nickname to opponent
-                    NetSendInput(false, false, false, false); // placeholder
-                    strcpy(player2Name, "Opponent");
+
+            // Receive opponent nickname
+            if (!opponentConnected) {
+                char recvName[32];
+                if (NetGetNickname(recvName, 32)) {
+                    opponentConnected = true;
+                    if (NetGetPlayerId() == 0) {
+                        strcpy(player2Name, recvName);
+                    } else {
+                        strcpy(player1Name, recvName);
+                    }
                 }
-                else {
-                    strcpy(player1Name, "Opponent");
+            }
+
+            // Check opponent ready
+            if (opponentConnected && !remoteReady) {
+                remoteReady = NetGetReady();
+            }
+
+            // Joiner: if host started the game, follow
+            if (!isHost && NetGetPlayerId() == 1) {
+                GameState gs;
+                std::vector<Asteroid> ast;
+                std::vector<Projectile> prj;
+                if (NetGetState(gs, ast, prj)) {
+                    if (gs.currentState == STATE_PLAYING) {
+                        ApplyGameState(gs);
+                        asteroids = ast;
+                        projectiles = prj;
+                    }
                 }
             }
         }
