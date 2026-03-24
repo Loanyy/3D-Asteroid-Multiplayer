@@ -186,7 +186,9 @@ void NetSendInput(bool thrust, bool left, bool right, bool shoot) {
     snprintf(buf, sizeof(buf),
         "{\"type\":\"input\",\"tf\":%d,\"rl\":%d,\"rr\":%d,\"sh\":%d}",
         thrust ? 1 : 0, left ? 1 : 0, right ? 1 : 0, shoot ? 1 : 0);
-    SendLine(buf);
+    if (!SendLine(buf)) {
+        g_conn = false;
+    }
 }
 
 void NetSendState(const GameState& gs,
@@ -232,7 +234,9 @@ void NetSendState(const GameState& gs,
             "%d,%d,%.3f,%.3f,%.3f,%.3f;",
             p.id, p.ownerId, p.x, p.z, p.vx, p.vz);
     len += snprintf(buf + len, sizeof(buf) - len, "\"}");
-    SendLine(buf);
+    if (!SendLine(buf)) {
+        g_conn = false;
+    }
 }
 
 bool NetGetInput(bool& thrust, bool& left, bool& right, bool& shoot) {
@@ -321,7 +325,7 @@ bool NetGetState(GameState& gs,
 void NetSendNickname(const char* name) {
     char buf[128];
     snprintf(buf, sizeof(buf), "{\"type\":\"nickname\",\"name\":\"%s\"}", name);
-    SendLine(buf);
+    if (!SendLine(buf)) g_conn = false;
 }
 
 bool NetGetNickname(char* name, int maxLen) {
@@ -335,7 +339,7 @@ bool NetGetNickname(char* name, int maxLen) {
 }
 
 void NetSendReady() {
-    SendLine("{\"type\":\"ready\"}");
+    if (!SendLine("{\"type\":\"ready\"}")) g_conn = false;
 }
 
 bool NetGetReady() {
@@ -344,7 +348,7 @@ bool NetGetReady() {
 
 void NetSendPing() {
     g_pingTime = SDL_GetTicks();
-    SendLine("{\"type\":\"ping\"}");
+    if (!SendLine("{\"type\":\"ping\"}")) g_conn = false;
 }
 
 float NetGetPing() {
@@ -352,7 +356,7 @@ float NetGetPing() {
 }
 
 void NetSendRematch() {
-    SendLine("{\"type\":\"rematch\"}");
+    if (!SendLine("{\"type\":\"rematch\"}")) g_conn = false;
 }
 
 bool NetGetRematch() {
