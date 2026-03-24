@@ -1559,13 +1559,17 @@ void Game::Update(float dt) {
 
     // Global multiplayer disconnect check
     if (isMultiplayer && !opponentDisconnected && !NetIsConnected()) {
-        if (currentState == STATE_PLAYING || currentState == STATE_ROUND_END) {
+        if (currentState == STATE_PLAYING || currentState == STATE_ROUND_END ||
+            currentState == STATE_MATCH_END || currentState == STATE_LOBBY) {
             opponentDisconnected = true;
-            if (NetGetPlayerId() == 0)
-                roundWins[0] = ROUNDS_TO_WIN;
-            else
-                roundWins[1] = ROUNDS_TO_WIN;
-            SetState(STATE_MATCH_END);
+            if (currentState == STATE_PLAYING || currentState == STATE_ROUND_END) {
+                if (NetGetPlayerId() == 0)
+                    roundWins[0] = ROUNDS_TO_WIN;
+                else
+                    roundWins[1] = ROUNDS_TO_WIN;
+            }
+            if (currentState != STATE_MATCH_END)
+                SetState(STATE_MATCH_END);
             return;
         }
     }
