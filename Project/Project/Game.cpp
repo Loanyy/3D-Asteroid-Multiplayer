@@ -30,6 +30,7 @@ Game::Game() {
     nicknameSent = false;
     strcpy(opponentName, "");
     netSendTimer = 0.0f;
+    pingTimer = 0.0f;
     lastMouseX = lastMouseY = -1;
     currentState = STATE_MAIN_MENU;
     roundNumber = 0;
@@ -885,6 +886,14 @@ void Game::DrawGame() {
     TTF_SizeText(fontSmall, rndStr, &rw, &rh);
     DrawText(rndStr, (mW - rw) * 0.5f, 110, fontSmall, 150, 150, 150);
 
+    if (isMultiplayer) {
+        char pingStr[32];
+        sprintf(pingStr, "%.0fms", NetGetPing());
+        int pw, ph;
+        TTF_SizeText(fontSmall, pingStr, &pw, &ph);
+        DrawText(pingStr, (mW - pw) * 0.5f, 150, fontSmall, 100, 100, 100);
+    }
+
     End2D();
     SDL_SetWindowTitle(gScreen, "ASTEROID 3D");
 }
@@ -1481,6 +1490,13 @@ void Game::Update(float dt) {
 
     case STATE_PLAYING:
         if (isMultiplayer) {
+
+            pingTimer += dt;
+            if (pingTimer >= 1.0f) {
+                pingTimer = 0.0f;
+                NetSendPing();
+            }
+
             if (NetGetPlayerId() == 0) {
                 // HOST: read joiner input, run logic, send state at 30Hz
                 NetGetInput(remThrust, remLeft, remRight, remShoot);

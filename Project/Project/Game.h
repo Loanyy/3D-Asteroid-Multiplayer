@@ -80,6 +80,7 @@ public:
     bool nicknameSent;
     char opponentName[32];
     float netSendTimer;
+    float pingTimer;
     bool keys[256];
     float mW, mH;
     int mCounter;
