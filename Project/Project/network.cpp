@@ -7,6 +7,7 @@
 #include <mutex>
 #include <atomic>
 #include <string>
+#include <SDL.h>
 #include <cstdio>
 #include <cstring>
 #include <stdexcept>
@@ -22,6 +23,9 @@ static std::string       g_nickMsg;
 static bool              g_hasNick = false;
 
 static std::atomic<bool> g_remoteReady{ false };
+
+static std::atomic<float> g_ping{ 0.0f };
+static Uint32 g_pingTime = 0;
 
 static char g_recvBuf[65536];
 static int  g_recvLen = 0;
@@ -92,6 +96,13 @@ static void RecvThread() {
                 g_pid = GetI(line, "player_id");
             if (line.find("\"ready\"") != std::string::npos) {
                 g_remoteReady = true;
+            }
+            if (line.find("\"pong\"") != std::string::npos) {
+                Uint32 now = SDL_GetTicks();
+                g_ping = (float)(now - g_pingTime);
+            }
+            if (line.find("\"ping\"") != std::string::npos) {
+                SendLine("{\"type\":\"pong\"}");
             }
             if (line.find("\"nickname\"") != std::string::npos) {
                 std::lock_guard<std::mutex> lk(g_mu);
@@ -309,4 +320,13 @@ void NetSendReady() {
 
 bool NetGetReady() {
     return g_remoteReady;
+}
+
+void NetSendPing() {
+    g_pingTime = SDL_GetTicks();
+    SendLine("{\"type\":\"ping\"}");
+}
+
+float NetGetPing() {
+    return g_ping;
 }

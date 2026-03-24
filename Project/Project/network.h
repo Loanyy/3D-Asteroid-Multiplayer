@@ -21,3 +21,5 @@ void NetSendNickname(const char* name);
 bool NetGetNickname(char* name, int maxLen);
 void NetSendReady();
 bool NetGetReady();
+void NetSendPing();
+float NetGetPing();
