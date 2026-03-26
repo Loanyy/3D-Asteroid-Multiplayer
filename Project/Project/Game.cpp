@@ -379,7 +379,8 @@ void Game::DrawCredits() {
     DrawText("Marius-Raul Filipiuc", mW * 0.12f, mH * 0.35f, fontMedium, 0, 255, 255);
 
     DrawText("Uppsala University - Campus Gotland", mW * 0.12f, mH * 0.42f, fontMedium, 180, 180, 180);
-    DrawText("Linear Algebra, Trigonometry and Geometry 2026 Spring", mW * 0.12f, mH * 0.49f, fontMedium, 180, 180, 180);
+    DrawText("Linear Algebra, Trigonometry and", mW * 0.12f, mH * 0.49f, fontMedium, 180, 180, 180);
+    DrawText("Geometry 2026 Spring", mW * 0.12f, mH * 0.56f, fontMedium, 180, 180, 180);
 
     DrawText("ESC to go back", (mW - 160) * 0.5f, mH * 0.88f, fontSmall, 100, 100, 100);
 
