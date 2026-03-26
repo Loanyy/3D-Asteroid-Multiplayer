@@ -401,7 +401,6 @@ void Game::DrawLobby() {
     float bx = mW * 0.25f;
     float bw = mW * 0.5f;
     float bh = mH * 0.08f;
-    bool mouseMoved = (mMouseX != lastMouseX || mMouseY != lastMouseY);
     float hostY = mH * 0.15f;
     float joinY = mH * 0.25f;
     bool hoverHost = (mMouseX >= bx && mMouseX <= bx + bw &&
