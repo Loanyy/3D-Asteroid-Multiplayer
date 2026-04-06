@@ -133,13 +133,71 @@ bool NetInit() {
 }
 
 bool NetConnect(const char* ip, int port) {
-    // Clean up any previous connection
     if (g_sock != INVALID_SOCKET) {
         g_conn = false;
         closesocket(g_sock);
         g_sock = INVALID_SOCKET;
-        SDL_Delay(100); // Let old recv thread die
+        SDL_Delay(100);
     }
+
+    g_sock = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+    if (g_sock == INVALID_SOCKET) return false;
+
+    int flag = 1;
+    setsockopt(g_sock, IPPROTO_TCP, TCP_NODELAY, (const char*)&flag, sizeof(flag));
+
+    
+    u_long mode = 1;
+    ioctlsocket(g_sock, FIONBIO, &mode);
+
+    sockaddr_in addr{};
+    addr.sin_family = AF_INET;
+    addr.sin_port = htons((u_short)port);
+    inet_pton(AF_INET, ip, &addr.sin_addr);
+
+    connect(g_sock, (sockaddr*)&addr, sizeof(addr));
+
+   
+    fd_set fds;
+    FD_ZERO(&fds);
+    FD_SET(g_sock, &fds);
+    timeval tv{ 3, 0 };
+    int result = select(0, NULL, &fds, NULL, &tv);
+
+    if (result <= 0) {
+        closesocket(g_sock);
+        g_sock = INVALID_SOCKET;
+        return false;
+    }
+
+ 
+    int err = 0;
+    int errLen = sizeof(err);
+    getsockopt(g_sock, SOL_SOCKET, SO_ERROR, (char*)&err, &errLen);
+    if (err != 0) {
+        closesocket(g_sock);
+        g_sock = INVALID_SOCKET;
+        return false;
+    }
+
+   
+    mode = 0;
+    ioctlsocket(g_sock, FIONBIO, &mode);
+
+    g_conn = true;
+    g_started = false;
+    g_pid = -1;
+    g_remoteReady = false;
+    g_hasNick = false;
+    g_hasMsg = false;
+    g_lastMsg.clear();
+    g_nickMsg.clear();
+    g_remoteRematch = false;
+    g_recvLen = 0;
+
+    std::thread(RecvThread).detach();
+    return true;
+}
 
     g_sock = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
     if (g_sock == INVALID_SOCKET) return false;
