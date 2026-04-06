@@ -197,6 +197,7 @@ void Game::SetState(GameStateEnum s) {
         nicknameSent = false;
         localRematch = false;
         remoteRematch = false;
+        opponentDisconnected = false;
         strcpy(nickname, "");
         nicknameLen = 0;
     }

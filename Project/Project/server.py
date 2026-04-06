@@ -45,6 +45,8 @@ def handle_client(conn, player_id, clients, lock):
 
 def run_match(server):
     import socket as sock_mod
+    global recv_buffers
+    recv_buffers = {}
     clients = [None, None]
     lock = threading.Lock()
 
