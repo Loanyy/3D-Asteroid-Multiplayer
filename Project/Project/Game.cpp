@@ -177,12 +177,10 @@ void Game::SetState(GameStateEnum s) {
 
 
     if (s == STATE_MAIN_MENU) {
-
         if (isMultiplayer) {
             NetDisconnect();
             isMultiplayer = false;
         }
-
         strcpy(lobbyCode, "");
         strcpy(lobbyCodeInput, "");
         lobbyCodeLen = 0;
@@ -200,10 +198,28 @@ void Game::SetState(GameStateEnum s) {
         opponentDisconnected = false;
         strcpy(nickname, "");
         nicknameLen = 0;
+        roundWins[0] = roundWins[1] = 0;
+        roundNumber = 0;
+        roundWinner = -1;
+        roundEndTimer = 0.0f;
+        roundTimer = ROUND_TIME;
+        asteroidSpawnTimer = 0.0f;
+        nextProjectileId = 0;
+        nextAsteroidId = 0;
+        players[0].alive = false;
+        players[1].alive = false;
+        asteroids.clear();
+        projectiles.clear();
+        netSendTimer = 0.0f;
+        pingTimer = 0.0f;
     }
 
     if (s == STATE_ROUND_END || s == STATE_MATCH_END)
         roundEndTimer = ROUND_END_PAUSE;
+    if (s == STATE_ROUND_END || s == STATE_MATCH_END)
+        roundEndTimer = ROUND_END_PAUSE;
+
+
 }
 
 void Game::InitGFX() {
