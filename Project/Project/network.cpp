@@ -21,20 +21,15 @@ static std::string       g_lastMsg;
 static bool              g_hasMsg = false;
 static std::string       g_nickMsg;
 static bool              g_hasNick = false;
-
 static std::atomic<bool> g_remoteReady{ false };
 static std::atomic<bool> g_remoteRematch{ false };
-
-
 static std::atomic<float> g_ping{ 0.0f };
 static Uint32 g_pingTime = 0;
-
 static char g_recvBuf[65536];
 static int  g_recvLen = 0;
 
 static std::string RecvLine() {
     while (true) {
-        // Check if we already have a complete line in buffer
         for (int i = 0; i < g_recvLen; i++) {
             if (g_recvBuf[i] == '\n') {
                 std::string line(g_recvBuf, i);
@@ -45,7 +40,6 @@ static std::string RecvLine() {
                 return line;
             }
         }
-        // Need more data
         int r = recv(g_sock, g_recvBuf + g_recvLen, sizeof(g_recvBuf) - g_recvLen, 0);
         if (r <= 0) throw std::runtime_error("disconnected");
         g_recvLen += r;
@@ -96,19 +90,16 @@ static void RecvThread() {
                 g_started = true;
             if (line.find("player_id") != std::string::npos && g_pid == -1)
                 g_pid = GetI(line, "player_id");
-            if (line.find("\"ready\"") != std::string::npos) {
+            if (line.find("\"ready\"") != std::string::npos)
                 g_remoteReady = true;
-            }
-            if (line.find("\"rematch\"") != std::string::npos) {
+            if (line.find("\"rematch\"") != std::string::npos)
                 g_remoteRematch = true;
-            }
             if (line.find("\"pong\"") != std::string::npos) {
                 Uint32 now = SDL_GetTicks();
                 g_ping = (float)(now - g_pingTime);
             }
-            if (line.find("\"ping\"") != std::string::npos) {
+            if (line.find("\"ping\"") != std::string::npos)
                 SendLine("{\"type\":\"pong\"}");
-            }
             if (line.find("\"nickname\"") != std::string::npos) {
                 std::lock_guard<std::mutex> lk(g_mu);
                 g_nickMsg = line;
@@ -146,7 +137,6 @@ bool NetConnect(const char* ip, int port) {
     int flag = 1;
     setsockopt(g_sock, IPPROTO_TCP, TCP_NODELAY, (const char*)&flag, sizeof(flag));
 
-    
     u_long mode = 1;
     ioctlsocket(g_sock, FIONBIO, &mode);
 
@@ -157,7 +147,6 @@ bool NetConnect(const char* ip, int port) {
 
     connect(g_sock, (sockaddr*)&addr, sizeof(addr));
 
-   
     fd_set fds;
     FD_ZERO(&fds);
     FD_SET(g_sock, &fds);
@@ -170,7 +159,6 @@ bool NetConnect(const char* ip, int port) {
         return false;
     }
 
- 
     int err = 0;
     int errLen = sizeof(err);
     getsockopt(g_sock, SOL_SOCKET, SO_ERROR, (char*)&err, &errLen);
@@ -180,37 +168,9 @@ bool NetConnect(const char* ip, int port) {
         return false;
     }
 
-   
     mode = 0;
     ioctlsocket(g_sock, FIONBIO, &mode);
 
-    g_conn = true;
-    g_started = false;
-    g_pid = -1;
-    g_remoteReady = false;
-    g_hasNick = false;
-    g_hasMsg = false;
-    g_lastMsg.clear();
-    g_nickMsg.clear();
-    g_remoteRematch = false;
-    g_recvLen = 0;
-
-    std::thread(RecvThread).detach();
-    return true;
-}
-
-    g_sock = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
-    if (g_sock == INVALID_SOCKET) return false;
-
-    int flag = 1;
-    setsockopt(g_sock, IPPROTO_TCP, TCP_NODELAY, (const char*)&flag, sizeof(flag));
-
-    sockaddr_in addr{};
-    addr.sin_family = AF_INET;
-    addr.sin_port = htons((u_short)port);
-    inet_pton(AF_INET, ip, &addr.sin_addr);
-    if (connect(g_sock, (sockaddr*)&addr, sizeof(addr)) == SOCKET_ERROR)
-        return false;
     g_conn = true;
     g_started = false;
     g_pid = -1;
@@ -233,7 +193,7 @@ void NetDisconnect() {
         closesocket(g_sock);
         g_sock = INVALID_SOCKET;
     }
-    SDL_Delay(50); // Let recv thread finish
+    SDL_Delay(50);
     g_started = false;
     g_pid = -1;
     g_remoteReady = false;
@@ -255,9 +215,7 @@ void NetSendInput(bool thrust, bool left, bool right, bool shoot) {
     snprintf(buf, sizeof(buf),
         "{\"type\":\"input\",\"tf\":%d,\"rl\":%d,\"rr\":%d,\"sh\":%d}",
         thrust ? 1 : 0, left ? 1 : 0, right ? 1 : 0, shoot ? 1 : 0);
-    if (!SendLine(buf)) {
-        g_conn = false;
-    }
+    if (!SendLine(buf)) g_conn = false;
 }
 
 void NetSendState(const GameState& gs,
@@ -303,9 +261,7 @@ void NetSendState(const GameState& gs,
             "%d,%d,%.3f,%.3f,%.3f,%.3f;",
             p.id, p.ownerId, p.x, p.z, p.vx, p.vz);
     len += snprintf(buf + len, sizeof(buf) - len, "\"}");
-    if (!SendLine(buf)) {
-        g_conn = false;
-    }
+    if (!SendLine(buf)) g_conn = false;
 }
 
 bool NetGetInput(bool& thrust, bool& left, bool& right, bool& shoot) {
