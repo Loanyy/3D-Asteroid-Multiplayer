@@ -1720,9 +1720,13 @@ void Game::Update(float dt) {
 
     case STATE_MATCH_END:
         if (isMultiplayer) {
-
             if (!NetIsConnected() && !opponentDisconnected) {
                 opponentDisconnected = true;
+                localRematch = false;
+                remoteRematch = false;
+            }
+            if (opponentDisconnected) {
+                break;
             }
             // Check remote rematch
             if (!remoteRematch) {
