@@ -120,13 +120,13 @@ static void mainLoop() {
                                 freeaddrinfo(res);
                             }
                             strcpy_s(G.lobbyCode, hostIP);
-                            NetConnect("127.0.0.1");
+                            NetConnect("127.0.0.1", true);
                         }
                         else if (G.lobbyChoice == 1 && G.lobbyCodeLen >= 7) {
                             G.isHost = false;
                             G.isMultiplayer = true;
                             G.lobbyReady = false;
-                            NetConnect(G.lobbyCodeInput);
+                            NetConnect(G.lobbyCodeInput, false);
                         }
                     }
                     break;
