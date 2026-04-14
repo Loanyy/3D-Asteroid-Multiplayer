@@ -123,7 +123,7 @@ bool NetInit() {
     return WSAStartup(MAKEWORD(2, 2), &wd) == 0;
 }
 
-bool NetConnect(const char* ip, int port) {
+bool NetConnect(const char* ip, bool asHost, int port) {
     if (g_sock != INVALID_SOCKET) {
         g_conn = false;
         closesocket(g_sock);
@@ -170,6 +170,15 @@ bool NetConnect(const char* ip, int port) {
 
     mode = 0;
     ioctlsocket(g_sock, FIONBIO, &mode);
+
+    // Tell server our role
+    char roleMsg[64];
+    snprintf(roleMsg, sizeof(roleMsg), "{\"role\":\"%s\"}\n", asHost ? "host" : "joiner");
+    if (send(g_sock, roleMsg, (int)strlen(roleMsg), 0) == SOCKET_ERROR) {
+        closesocket(g_sock);
+        g_sock = INVALID_SOCKET;
+        return false;
+    }
 
     g_conn = true;
     g_started = false;

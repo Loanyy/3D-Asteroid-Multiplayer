@@ -4,7 +4,7 @@
 #include <vector>
 #include "Entities.h"
 bool NetInit();
-bool NetConnect(const char* ip, int port = 5050);
+bool NetConnect(const char* ip, bool asHost, int port = 5050);
 void NetDisconnect();
 bool NetIsConnected();
 int  NetGetPlayerId();
