@@ -89,10 +89,11 @@ def handle_new_connection(conn, addr):
 
         if is_host:
             with waiting_host_lock:
-                # If there's already a waiting host, kick the old one
                 if waiting_host is not None:
                     old_conn, _ = waiting_host
                     print("Replacing stale waiting host")
+                    try: old_conn.shutdown(socket.SHUT_RDWR)
+                    except: pass
                     try: old_conn.close()
                     except: pass
                 waiting_host = (conn, buf)
@@ -108,8 +109,16 @@ def handle_new_connection(conn, addr):
                 waiting_host = None
             print(f"[JOINER] {addr} matched with host")
             # Verify host still alive
+            # Check host alive with a small probe
             try:
-                host_conn.send(b'')
+                host_conn.setblocking(False)
+                try:
+                    test = host_conn.recv(1, socket.MSG_PEEK)
+                    if test == b'':
+                        raise ConnectionError("host closed")
+                except BlockingIOError:
+                    pass  # No data but still connected
+                host_conn.setblocking(True)
             except:
                 print("Host died before joiner arrived")
                 try: host_conn.close()

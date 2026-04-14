@@ -1089,7 +1089,8 @@ void Game::Mouse(int button, int state, int x, int y) {
                     freeaddrinfo(res);
                 }
                 strcpy(lobbyCode, hostIP);
-                NetConnect("127.0.0.1");
+                NetDisconnect();
+                NetConnect("127.0.0.1", true);
             }
         }
 
