@@ -128,7 +128,7 @@ bool NetConnect(const char* ip, int port) {
         g_conn = false;
         closesocket(g_sock);
         g_sock = INVALID_SOCKET;
-        SDL_Delay(100);
+        SDL_Delay(150); // Let old recv thread die
     }
 
     g_sock = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
@@ -193,7 +193,7 @@ void NetDisconnect() {
         closesocket(g_sock);
         g_sock = INVALID_SOCKET;
     }
-    SDL_Delay(50);
+    SDL_Delay(150); // Let recv thread finish
     g_started = false;
     g_pid = -1;
     g_remoteReady = false;

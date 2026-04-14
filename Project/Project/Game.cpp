@@ -1574,6 +1574,11 @@ void Game::ApplyGameState(const GameState& gs) {
 
 void Game::Update(float dt) {
 
+    // Reset disconnect flag if we're back in lobby/menu
+    if (currentState == STATE_LOBBY || currentState == STATE_MAIN_MENU) {
+        opponentDisconnected = false;
+    }
+
     // Global multiplayer disconnect check
     if (isMultiplayer && !opponentDisconnected && opponentConnected && !NetIsConnected()) {
         if (currentState == STATE_PLAYING || currentState == STATE_ROUND_END ||
