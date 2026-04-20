@@ -2,12 +2,10 @@
 
 ![Gameplay](screenshots/gameplayscreenshot.png)
 
-A 1v1 LAN multiplayer 3D Asteroids game built with C++, SDL2, and legacy OpenGL...
 
-A 1v1 LAN multiplayer 3D Asteroids game built with C++, SDL2, and legacy OpenGL. Made as a final project for the **Real-Time Computer Graphics** course at **Uppsala University – Campus Gotland** (Spring 2026).
 
-<!-- TODO: Add a gameplay GIF or screenshot here -->
-<!-- ![Gameplay](screenshots/gameplay.gif) -->
+A 1v1 LAN multiplayer 3D Asteroids game built with C++, SDL2, and legacy OpenGL. Made as a final project for the  Linear Algebra, Trigonometry and Geometry course at **Uppsala University – Campus Gotland** (Spring 2026).
+
 
 ## What is this?
 
@@ -27,6 +25,16 @@ The game runs a host-authoritative networking model over TCP, with a lightweight
 - **Disconnect Detection** — if either player leaves mid-game, the remaining player sees "[name] left the game!" and wins automatically
 - **Rematch System** — after a match, both players can vote to rematch without re-entering IPs or restarting the server
 - **TCP\_NODELAY** — enabled on both client and server to minimize latency spikes from Nagle's algorithm
+
+## Screenshots
+
+| Main Menu | Lobby |
+|-----------|-------|
+| ![Menu](screenshots/asteroidmenu.png) | ![Lobby](screenshots/menuconnectetd.png) |
+
+| Gameplay | Match End |
+|----------|-----------|
+| ![Gameplay](screenshots/gameplayscreenshot.png) | ![Win](screenshots/winscreen.png) |
 
 ## Tech Stack
 
