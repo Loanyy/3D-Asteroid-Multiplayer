@@ -152,11 +152,13 @@ xcopy "$(ProjectDir)fonts" "$(OutDir)fonts\" /Y /I</Command>
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClInclude Include="Constants.h" />
+    <ClInclude Include="Bot.h" />
     <ClInclude Include="Entities.h" />
     <ClInclude Include="Game.h" />
     <ClInclude Include="network.h" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="Bot.cpp" />
     <ClCompile Include="Game.cpp" />
     <ClCompile Include="Main.cpp" />
     <ClCompile Include="network.cpp" />

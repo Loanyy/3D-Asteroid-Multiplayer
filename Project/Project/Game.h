@@ -8,6 +8,7 @@
 #include <vector>
 #include "Constants.h"
 #include "Entities.h"
+#include "Bot.h"
 #include <gl/GLU.h>
 #include <SDL_ttf.h>
 #define For(i,N) for (int (i) = 0; (i) < (N); (i)++)
@@ -17,8 +18,13 @@ public:
     Game(void);
     ~Game(void);
     bool isMultiplayer;
+    bool vsBot;              // offline match: player 0 = human, player 1 = BotController
+    BotController bot;
+    InputState botInput;     // bot decision for the current frame
     bool remThrust, remLeft, remRight, remShoot;
     void SetState(GameStateEnum s);
+    void StartVsBotMatch();
+    void ActivateMainMenuItem(int item);
     void ResetRound();
     void ResetMatch();
     void Update(float dt);
@@ -44,6 +50,9 @@ public:
     void DrawMatchEnd();
     void DrawRules();
     void DrawCredits();
+    bool WorldToScreen(float x, float y, float z, float& sx, float& sy);
+    void DrawShipLabel(float x, float z, const char* text,
+        unsigned char r, unsigned char g, unsigned char b);
     void NormalKeys(unsigned char key, int state);
     void SpecialKeys(int key, int state);
     void Mouse(int button, int state, int x, int y);
@@ -93,6 +102,9 @@ public:
     TTF_Font* fontLarge;
     TTF_Font* fontMedium;
     TTF_Font* fontSmall;
+    TTF_Font* fontTiny;
     void DrawText(const char* text, float x, float y, TTF_Font* font,
+        unsigned char r, unsigned char g, unsigned char b);
+    void DrawTextCentered(const char* text, float y, TTF_Font* font,
         unsigned char r, unsigned char g, unsigned char b);
 };

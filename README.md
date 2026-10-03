@@ -9,13 +9,14 @@ A 1v1 LAN multiplayer 3D Asteroids game built with C++, SDL2, and legacy OpenGL.
 
 ## What is this?
 
-Two players connect over a local network, each controlling a ship in a shared 3D arena. Shoot asteroids for points, shoot each other to steal lives, and survive — best of 3 rounds wins the match.
+Two players connect over a local network, each controlling a ship in a shared 3D arena. Shoot asteroids for points, shoot each other to steal lives, and survive — best of 3 rounds wins the match. The same match can also be played offline against a computer-controlled bot.
 
 The game runs a host-authoritative networking model over TCP, with a lightweight Python relay server handling message forwarding between clients.
 
 ## Features
 
 - **1v1 LAN Multiplayer** — host/join lobby system with IP-based connection, nickname exchange, ready-up flow, and rematch voting
+- **Offline VS Bot** — a bot drives the second ship through the same `InputState` (thrust / rotate / shoot) a human produces, so it obeys the same physics, cooldowns, collisions and scoring; it has a reaction delay and imperfect aim, and its tuning values live in `Constants.h`
 - **3-Tier Asteroid System** — large asteroids split into medium, medium into small, small are destroyed (classic Asteroids behavior)
 - **Best-of-3 Rounds** — 30-second timed rounds with score and elimination-based win conditions
 - **Host-Authoritative Networking** — host runs all game logic; joiner receives state updates at 30 Hz with local visual interpolation to keep rendering smooth
@@ -70,11 +71,15 @@ The game runs a host-authoritative networking model over TCP, with a lightweight
 3. Set configuration to **Debug | x64**
 4. Build and run (Ctrl+F5)
 
+### Playing Against the Bot
+
+Select **VS BOT** in the main menu. No server or network connection is needed. After the match, press **REMATCH** (or ENTER) to play again, or **MAIN MENU** (or ESC).
+
 ### Starting a Multiplayer Game
 
 1. One player runs `start_server.bat` (or `python server.py` from the project directory)
-2. That player opens the game → enters nickname → selects **HOST GAME** → sees their local IP
-3. The other player (on the same network) opens the game → enters nickname → selects **JOIN GAME** → types the host's IP → presses Enter
+2. That player opens the game → selects **LAN MULTIPLAYER** → enters nickname → selects **HOST GAME** → sees their local IP
+3. The other player (on the same network) opens the game → selects **LAN MULTIPLAYER** → enters nickname → selects **JOIN GAME** → types the host's IP → presses Enter
 4. Both players click **READY**, then the host clicks **START MATCH**
 
 > **Note:** University/corporate WiFi (e.g., eduroam) typically blocks peer-to-peer connections. Use a phone hotspot or Tailscale VPN as a workaround.
@@ -90,7 +95,8 @@ Project/
 │   ├── Main.cpp           ← SDL event loop, input handling
 │   ├── Game.cpp           ← Game logic, rendering, state machine, HUD
 │   ├── Game.h             ← Game class definition
-│   ├── Constants.h        ← Gameplay tuning values
+│   ├── Bot.cpp / Bot.h    ← VS Bot controller (produces InputState like a human)
+│   ├── Constants.h        ← Gameplay tuning values (incl. bot difficulty)
 │   ├── Entities.h         ← Player, Asteroid, Projectile, GameState structs
 │   ├── network.cpp        ← Winsock2 TCP client, send/recv, ping
 │   ├── network.h          ← Network API declarations

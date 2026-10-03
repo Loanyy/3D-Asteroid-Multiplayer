@@ -3,6 +3,7 @@
 #include "Game.h"
 #include "network.h"
 #include <ws2tcpip.h>
+#include <ctime>
 
 Game G;
 SDL_Window* gScreen;
@@ -22,7 +23,7 @@ static void initAttributes() {
 static void createSurface() {
     SDL_Init(SDL_INIT_EVERYTHING);
     initAttributes();
-    gScreen = SDL_CreateWindow("GFX",
+    gScreen = SDL_CreateWindow("ASTEROID 3D",
         SDL_WINDOWPOS_UNDEFINED,
         SDL_WINDOWPOS_UNDEFINED,
         0, 0,
@@ -179,6 +180,7 @@ static void mainLoop() {
 }
 
 int main(int, char**) {
+    srand((unsigned)time(nullptr)); // different asteroid layouts every launch
     createSurface();
     NetInit();
     G.InitGFX();

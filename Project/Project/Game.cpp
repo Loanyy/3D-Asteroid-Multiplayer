@@ -48,6 +48,8 @@ Game::Game() {
     players[1].alive = false;
 
     isMultiplayer = false;
+    vsBot = false;
+    botInput = InputState();
     remThrust = remLeft = remRight = remShoot = false;
     mMouseMotionX = mMouseMotionY = 0;
 
@@ -55,6 +57,7 @@ Game::Game() {
     fontLarge = TTF_OpenFont("fonts/ShareTechMono-Regular.ttf", 96);
     fontMedium = TTF_OpenFont("fonts/ShareTechMono-Regular.ttf", 56);
     fontSmall = TTF_OpenFont("fonts/ShareTechMono-Regular.ttf", 36);
+    fontTiny = TTF_OpenFont("fonts/ShareTechMono-Regular.ttf", 28);
 }
 
 Game::~Game() {
@@ -63,6 +66,7 @@ Game::~Game() {
     if (fontLarge)  TTF_CloseFont(fontLarge);
     if (fontMedium) TTF_CloseFont(fontMedium);
     if (fontSmall)  TTF_CloseFont(fontSmall);
+    if (fontTiny)   TTF_CloseFont(fontTiny);
     TTF_Quit();
 }
 
@@ -96,6 +100,9 @@ void Game::ResetRound() {
     nextAsteroidId = 0;
     SpawnInitialAsteroids();
     roundNumber++;
+
+    bot.Reset();
+    botInput = InputState();
 }
 
 void Game::ResetMatch() {
@@ -131,6 +138,25 @@ static void DrawRect2D(float x, float y, float w, float h,
     glVertex2f(x + w, y + h); glVertex2f(x, y + h);
     glEnd();
     glDisable(GL_BLEND);
+}
+
+// Cube from -1 to 1 with one normal per face, so lighting shades each face
+// consistently instead of using whatever normal was set last.
+static void DrawUnitCube() {
+    glBegin(GL_QUADS);
+    glNormal3f(0, -1, 0);
+    glVertex3f(-1, -1, -1); glVertex3f(1, -1, -1); glVertex3f(1, -1, 1); glVertex3f(-1, -1, 1);
+    glNormal3f(0, 1, 0);
+    glVertex3f(-1, 1, -1); glVertex3f(-1, 1, 1); glVertex3f(1, 1, 1); glVertex3f(1, 1, -1);
+    glNormal3f(0, 0, 1);
+    glVertex3f(-1, -1, 1); glVertex3f(1, -1, 1); glVertex3f(1, 1, 1); glVertex3f(-1, 1, 1);
+    glNormal3f(0, 0, -1);
+    glVertex3f(-1, -1, -1); glVertex3f(-1, 1, -1); glVertex3f(1, 1, -1); glVertex3f(1, -1, -1);
+    glNormal3f(-1, 0, 0);
+    glVertex3f(-1, -1, -1); glVertex3f(-1, -1, 1); glVertex3f(-1, 1, 1); glVertex3f(-1, 1, -1);
+    glNormal3f(1, 0, 0);
+    glVertex3f(1, -1, -1); glVertex3f(1, 1, -1); glVertex3f(1, 1, 1); glVertex3f(1, -1, 1);
+    glEnd();
 }
 
 void Game::DrawText(const char* text, float x, float y, TTF_Font* font,
@@ -170,6 +196,14 @@ void Game::DrawText(const char* text, float x, float y, TTF_Font* font,
     glDisable(GL_BLEND);
     glDeleteTextures(1, &texId);
     SDL_FreeSurface(surface);
+}
+
+void Game::DrawTextCentered(const char* text, float y, TTF_Font* font,
+    unsigned char r, unsigned char g, unsigned char b) {
+    if (!font) return;
+    int tw, th;
+    TTF_SizeText(font, text, &tw, &th);
+    DrawText(text, (mW - tw) * 0.5f, y, font, r, g, b);
 }
 
 void Game::SetState(GameStateEnum s) {
@@ -212,14 +246,66 @@ void Game::SetState(GameStateEnum s) {
         projectiles.clear();
         netSendTimer = 0.0f;
         pingTimer = 0.0f;
+        vsBot = false;
+        botInput = InputState();
+        strcpy(player1Name, "P1");
+        strcpy(player2Name, "P2");
     }
 
     if (s == STATE_ROUND_END || s == STATE_MATCH_END)
         roundEndTimer = ROUND_END_PAUSE;
-    if (s == STATE_ROUND_END || s == STATE_MATCH_END)
-        roundEndTimer = ROUND_END_PAUSE;
+}
 
+// Offline match against the bot, started from the main menu (where SetState has
+// already closed any connection). No sockets are touched in this mode:
+// Update() runs UpdatePlaying() locally and BuildInputState() asks the bot for player 1.
+void Game::StartVsBotMatch() {
+    vsBot = true;
+    strcpy(player1Name, "PLAYER");
+    strcpy(player2Name, "BOT");
+    ResetMatch();
+    SetState(STATE_PLAYING);
+}
 
+static const int MAIN_MENU_ITEM_COUNT = 5;
+static const char* MAIN_MENU_ITEMS[MAIN_MENU_ITEM_COUNT] = {
+    "VS BOT", "LAN MULTIPLAYER", "RULES", "CREDITS", "QUIT"
+};
+
+// Shared by DrawMainMenu() and Mouse() so the hit boxes always match the drawing.
+static void MainMenuItemRect(float w, float h, int i,
+    float& x, float& y, float& bw, float& bh) {
+    x = w * 0.3f;
+    y = h * 0.30f + i * h * 0.09f;
+    bw = w * 0.4f;
+    bh = h * 0.07f;
+}
+
+static bool PointInRect(int px, int py, float x, float y, float w, float h) {
+    return px >= x && px <= x + w && py >= y && py <= y + h;
+}
+
+// VS Bot match-end buttons, shared by DrawMatchEnd() and Mouse().
+static void BotRematchButtonRect(float w, float h, float& x, float& y, float& bw, float& bh) {
+    x = w * 0.2f; y = h * 0.47f; bw = w * 0.28f; bh = h * 0.08f;
+}
+
+static void BotMenuButtonRect(float w, float h, float& x, float& y, float& bw, float& bh) {
+    x = w * 0.52f; y = h * 0.47f; bw = w * 0.28f; bh = h * 0.08f;
+}
+
+void Game::ActivateMainMenuItem(int item) {
+    switch (item) {
+    case 0: StartVsBotMatch(); break;
+    case 1: SetState(STATE_NICKNAME); enteringNickname = true; nicknameLen = (int)strlen(nickname); break;
+    case 2: SetState(STATE_RULES);   break;
+    case 3: SetState(STATE_CREDITS); break;
+    case 4: {
+        SDL_Event q;
+        q.type = SDL_QUIT;
+        SDL_PushEvent(&q);
+    } break;
+    }
 }
 
 void Game::InitGFX() {
@@ -258,6 +344,9 @@ void Game::InitGFX() {
     glEnable(GL_LIGHT0);
     glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
     glEnable(GL_MULTISAMPLE_ARB);
+    // Asteroids are scaled non-uniformly, which would otherwise stretch their
+    // normals and blow out the specular highlight (asteroids flashing white).
+    glEnable(GL_NORMALIZE);
 }
 
 void Game::ChangeSize(int w, int h) {
@@ -283,25 +372,20 @@ void Game::DrawMainMenu() {
     DrawText(title, (mW - tw) * 0.5f, mH * 0.1f, fontLarge, 255, 255, 255);
 
     // Menu items
-    const char* items[] = { "PLAY", "RULES", "CREDITS", "QUIT" };
-    
-    for (int i = 0; i < 4; i++) {
-        float iy = mH * 0.35f + i * mH * 0.1f;
-        float bx = mW * 0.3f;
-        float bw = mW * 0.4f;
-        float bh = mH * 0.075f;
+    for (int i = 0; i < MAIN_MENU_ITEM_COUNT; i++) {
+        float bx, iy, bw, bh;
+        MainMenuItemRect(mW, mH, i, bx, iy, bw, bh);
 
         bool mouseMoved = (mMouseX != lastMouseX || mMouseY != lastMouseY);
-        bool hover = (mMouseX >= bx && mMouseX <= bx + bw &&
-            mMouseY >= iy && mMouseY <= iy + bh);
+        bool hover = PointInRect(mMouseX, mMouseY, bx, iy, bw, bh);
         if (hover && mouseMoved) menuSelection = i;
         bool sel = (menuSelection == i);
 
         DrawRect2D(bx, iy, bw, bh,
             sel ? 80 : 30, sel ? 120 : 60, sel ? 200 : 100);
         int iw, ih;
-        TTF_SizeText(fontMedium, items[i], &iw, &ih);
-        DrawText(items[i], (mW - iw) * 0.5f, iy + (bh - ih) * 0.5f,
+        TTF_SizeText(fontMedium, MAIN_MENU_ITEMS[i], &iw, &ih);
+        DrawText(MAIN_MENU_ITEMS[i], (mW - iw) * 0.5f, iy + (bh - ih) * 0.5f,
             fontMedium, sel ? 255 : 150, sel ? 255 : 150, sel ? 255 : 150);
     }
 
@@ -360,7 +444,7 @@ void Game::DrawRules() {
     DrawRect2D(0, 0, mW, mH, 5, 5, 20);
     DrawRect2D(mW * 0.1f, mH * 0.08f, mW * 0.8f, mH * 0.84f, 15, 15, 40);
 
-    DrawText("RULES", (mW - 120) * 0.5f, mH * 0.12f, fontLarge, 255, 255, 255);
+    DrawTextCentered("RULES", mH * 0.12f, fontLarge, 255, 255, 255);
 
     const char* lines[] = {
         "Best of 3 rounds - 30 seconds each",
@@ -379,7 +463,7 @@ void Game::DrawRules() {
             fontSmall, 180, 180, 180);
     }
 
-    DrawText("ESC to go back", (mW - 160) * 0.5f, mH * 0.88f, fontSmall, 100, 100, 100);
+    DrawTextCentered("ESC to go back", mH * 0.88f, fontSmall, 100, 100, 100);
     End2D();
     SDL_SetWindowTitle(gScreen, "ASTEROID 3D - RULES");
 }
@@ -390,7 +474,7 @@ void Game::DrawCredits() {
     DrawRect2D(0, 0, mW, mH, 5, 5, 20);
     DrawRect2D(mW * 0.1f, mH * 0.08f, mW * 0.8f, mH * 0.84f, 15, 15, 40);
 
-    DrawText("CREDITS", (mW - 160) * 0.5f, mH * 0.12f, fontLarge, 255, 255, 255);
+    DrawTextCentered("CREDITS", mH * 0.12f, fontLarge, 255, 255, 255);
 
     DrawText("Okan Ozcan", mW * 0.12f, mH * 0.30f, fontMedium, 0, 255, 255);
     DrawText("Marius-Raul Filipiuc", mW * 0.12f, mH * 0.35f, fontMedium, 0, 255, 255);
@@ -399,7 +483,7 @@ void Game::DrawCredits() {
     DrawText("Linear Algebra, Trigonometry and", mW * 0.12f, mH * 0.49f, fontMedium, 180, 180, 180);
     DrawText("Geometry 2026 Spring", mW * 0.12f, mH * 0.56f, fontMedium, 180, 180, 180);
 
-    DrawText("ESC to go back", (mW - 160) * 0.5f, mH * 0.88f, fontSmall, 100, 100, 100);
+    DrawTextCentered("ESC to go back", mH * 0.88f, fontSmall, 100, 100, 100);
 
     End2D();
     SDL_SetWindowTitle(gScreen, "ASTEROID 3D - CREDITS");
@@ -594,14 +678,19 @@ void Game::DrawRoundEnd() {
     char msg[128];
     if (roundWinner == -1)
         sprintf(msg, "DRAW!");
+    else if (vsBot)
+        sprintf(msg, roundWinner == 0 ? "YOU WIN THE ROUND!" : "BOT WINS THE ROUND!");
     else {
         const char* winnerName = (roundWinner == 0) ? player1Name : player2Name;
         sprintf(msg, "%s WINS THE ROUND!", winnerName);
     }
     int tw, th;
     TTF_SizeText(fontLarge, msg, &tw, &th);
-    DrawText(msg, (mW - tw) * 0.5f, mH * 0.32f, fontLarge,
-        roundWinner == 0 ? 0 : 255, roundWinner == 0 ? 255 : 50, roundWinner == 0 ? 255 : 50);
+    if (roundWinner == -1)
+        DrawText(msg, (mW - tw) * 0.5f, mH * 0.32f, fontLarge, 220, 220, 220);
+    else
+        DrawText(msg, (mW - tw) * 0.5f, mH * 0.32f, fontLarge,
+            roundWinner == 0 ? 0 : 255, roundWinner == 0 ? 255 : 50, roundWinner == 0 ? 255 : 50);
 
     char score[64];
     sprintf(score, "Wins: %d - %d", roundWins[0], roundWins[1]);
@@ -620,7 +709,7 @@ void Game::DrawRoundEnd() {
 void Game::DrawMatchEnd() {
     DrawGame();
     Begin2D(mW, mH);
-    DrawRect2D(mW * 0.15f, mH * 0.2f, mW * 0.7f, mH * 0.5f, 10, 10, 50, 220);
+    DrawRect2D(mW * 0.15f, mH * 0.2f, mW * 0.7f, mH * (vsBot ? 0.45f : 0.5f), 10, 10, 50, 220);
 
     // Disconnect message
     if (opponentDisconnected) {
@@ -637,7 +726,10 @@ void Game::DrawMatchEnd() {
     int winIdx = (roundWins[0] >= ROUNDS_TO_WIN) ? 0 : 1;
     const char* winnerName = (winIdx == 0) ? player1Name : player2Name;
     char msg[128];
-    sprintf(msg, "%s WINS!", winnerName);
+    if (vsBot)
+        sprintf(msg, winIdx == 0 ? "YOU WIN!" : "BOT WINS!");
+    else
+        sprintf(msg, "%s WINS!", winnerName);
     int tw, th;
     TTF_SizeText(fontLarge, msg, &tw, &th);
     unsigned char cr = (winIdx == 0) ? 0 : 255;
@@ -661,7 +753,7 @@ void Game::DrawMatchEnd() {
         bool hoverRet = (mMouseX >= rbx && mMouseX <= rbx + rbw &&
             mMouseY >= rby && mMouseY <= rby + rbh);
         DrawRect2D(rbx, rby, rbw, rbh, hoverRet ? 80 : 50, hoverRet ? 120 : 80, hoverRet ? 200 : 150);
-        const char* retTxt = "RETURN TO LOBBY";
+        const char* retTxt = "MAIN MENU";
         int rtw2, rth2;
         TTF_SizeText(fontMedium, retTxt, &rtw2, &rth2);
         DrawText(retTxt, (mW - rtw2) * 0.5f, rby + (rbh - rth2) * 0.5f,
@@ -693,7 +785,7 @@ void Game::DrawMatchEnd() {
                 fontMedium, 255, 255, 255);
         }
 
-        // QUIT button
+        // QUIT button (returns to the main menu)
         float qbx = mW * 0.52f;
         float qby = mH * 0.53f;
         float qbw = mW * 0.28f;
@@ -701,30 +793,75 @@ void Game::DrawMatchEnd() {
         bool hoverQuit = (mMouseX >= qbx && mMouseX <= qbx + qbw &&
             mMouseY >= qby && mMouseY <= qby + qbh);
         DrawRect2D(qbx, qby, qbw, qbh, hoverQuit ? 200 : 150, 0, 0);
-        const char* quitTxt = "QUIT";
+        const char* quitTxt = "MAIN MENU";
         int qtw, qth;
         TTF_SizeText(fontMedium, quitTxt, &qtw, &qth);
         DrawText(quitTxt, qbx + (qbw - qtw) * 0.5f, qby + (qbh - qth) * 0.5f,
             fontMedium, 255, 255, 255);
     }
-    else {
-        char back[64];
-        sprintf(back, "Returning to menu in %.0fs...", roundEndTimer);
-        TTF_SizeText(fontSmall, back, &tw, &th);
-        DrawText(back, (mW - tw) * 0.5f, mH * 0.55f, fontSmall, 150, 150, 150);
+    else if (vsBot) {
+        float bx, by, bw, bh;
+        BotRematchButtonRect(mW, mH, bx, by, bw, bh);
+        bool hoverRem = PointInRect(mMouseX, mMouseY, bx, by, bw, bh);
+        DrawRect2D(bx, by, bw, bh, 0, hoverRem ? 200 : 150, 0);
+        int btw, bth;
+        TTF_SizeText(fontMedium, "REMATCH", &btw, &bth);
+        DrawText("REMATCH", bx + (bw - btw) * 0.5f, by + (bh - bth) * 0.5f,
+            fontMedium, 255, 255, 255);
+
+        BotMenuButtonRect(mW, mH, bx, by, bw, bh);
+        bool hoverMenu = PointInRect(mMouseX, mMouseY, bx, by, bw, bh);
+        DrawRect2D(bx, by, bw, bh, hoverMenu ? 200 : 150, 0, 0);
+        TTF_SizeText(fontMedium, "MAIN MENU", &btw, &bth);
+        DrawText("MAIN MENU", bx + (bw - btw) * 0.5f, by + (bh - bth) * 0.5f,
+            fontMedium, 255, 255, 255);
+
+        DrawTextCentered("ENTER  rematch    |    ESC  main menu", mH * 0.59f,
+            fontSmall, 120, 120, 120);
     }
 
     End2D();
     SDL_SetWindowTitle(gScreen, "ASTEROID 3D");
 }
 
+// Projects a world position to 2D HUD coordinates (origin top-left). Must be called
+// while the 3D camera matrices are active.
+bool Game::WorldToScreen(float x, float y, float z, float& sx, float& sy) {
+    GLdouble model[16], proj[16];
+    GLint view[4];
+    glGetDoublev(GL_MODELVIEW_MATRIX, model);
+    glGetDoublev(GL_PROJECTION_MATRIX, proj);
+    glGetIntegerv(GL_VIEWPORT, view);
+    GLdouble wx, wy, wz;
+    if (gluProject(x, y, z, model, proj, view, &wx, &wy, &wz) != GL_TRUE) return false;
+    sx = (float)wx;
+    sy = mH - (float)wy; // OpenGL window y points up, HUD y points down
+    return true;
+}
+
+// Draws a small name tag just below a ship.
+void Game::DrawShipLabel(float x, float z, const char* text,
+    unsigned char r, unsigned char g, unsigned char b) {
+    if (!fontTiny) return;
+    // With this top-down camera, screen-down is world +z. 3.3 units clears the ship's nose.
+    float sx, sy;
+    if (!WorldToScreen(x, 0.3f, z + 3.3f, sx, sy)) return;
+
+    int tw, th;
+    TTF_SizeText(fontTiny, text, &tw, &th);
+    Begin2D(mW, mH);
+    DrawText(text, sx - tw * 0.5f, sy, fontTiny, r, g, b);
+    End2D();
+}
+
 void Game::DrawGame() {
     glLoadIdentity();
     gluLookAt(0, 65, 0.1, 0, 0, 0, 0, 1, 0);
 
-    // Grid
+    // Grid (unlit so its brightness doesn't depend on leftover normals)
+    glDisable(GL_LIGHTING);
     glLineWidth(1);
-    glColor3ub(20, 20, 20); // for color 
+    glColor3ub(24, 24, 32);
     int n = (int)WORLD_SIZE;
     for (int i = -n; i <= n; i += 10) {
         glBegin(GL_LINES);
@@ -735,7 +872,17 @@ void Game::DrawGame() {
         glEnd();
     }
 
-
+    // Arena border: ships and asteroids wrap around at this edge
+    glLineWidth(2);
+    glColor3ub(50, 80, 140);
+    glBegin(GL_LINE_LOOP);
+    glVertex3f(-WORLD_SIZE, 0, -WORLD_SIZE);
+    glVertex3f(WORLD_SIZE, 0, -WORLD_SIZE);
+    glVertex3f(WORLD_SIZE, 0, WORLD_SIZE);
+    glVertex3f(-WORLD_SIZE, 0, WORLD_SIZE);
+    glEnd();
+    glLineWidth(1);
+    glEnable(GL_LIGHTING);
 
     // Player 0
     bool vis0 = true;
@@ -743,6 +890,7 @@ void Game::DrawGame() {
         vis0 = ((int)(players[0].invulnTime / PLAYER_FLASH_RATE) % 2 == 0);
     if (players[0].alive && vis0) {
         glColor3ub(0, 255, 255);
+        glNormal3f(0.0f, 1.0f, 0.0f);
         glPushMatrix();
         glTranslatef(players[0].x, 0.3f, players[0].z);
         glRotatef(players[0].rotation, 0, 1, 0);
@@ -775,6 +923,7 @@ void Game::DrawGame() {
         vis1 = ((int)(players[1].invulnTime / PLAYER_FLASH_RATE) % 2 == 0);
     if (players[1].alive && vis1) {
         glColor3ub(255, 50, 50);
+        glNormal3f(0.0f, 1.0f, 0.0f);
         glPushMatrix();
         glTranslatef(players[1].x, 0.3f, players[1].z);
         glRotatef(players[1].rotation, 0, 1, 0);
@@ -801,9 +950,10 @@ void Game::DrawGame() {
         glPopMatrix();
     }
 
-    // Projectiles
-    glColor3ub(255, 255, 0);
+    // Projectiles, tinted with the owner's ship color
     for (int i = 0; i < (int)projectiles.size(); i++) {
+        if (projectiles[i].ownerId == 0) glColor3ub(150, 255, 255);
+        else                             glColor3ub(255, 150, 150);
         glPushMatrix();
         glTranslatef(projectiles[i].x, 0.3f, projectiles[i].z);
         gluSphere(mQuadratic, 0.3, 8, 8);
@@ -826,45 +976,49 @@ void Game::DrawGame() {
         glRotatef(a.rotation, 0.3f, 1.0f, 0.2f);
         float s = a.radius;
         glScalef(s, s * 0.5f, s);
-        glBegin(GL_QUADS);
-        glVertex3f(-1, -1, -1); glVertex3f(1, -1, -1); glVertex3f(1, -1, 1); glVertex3f(-1, -1, 1);
-        glVertex3f(-1, 1, -1); glVertex3f(-1, 1, 1); glVertex3f(1, 1, 1); glVertex3f(1, 1, -1);
-        glVertex3f(-1, -1, 1); glVertex3f(1, -1, 1); glVertex3f(1, 1, 1); glVertex3f(-1, 1, 1);
-        glVertex3f(-1, -1, -1); glVertex3f(-1, 1, -1); glVertex3f(1, 1, -1); glVertex3f(1, -1, -1);
-        glVertex3f(-1, -1, -1); glVertex3f(-1, -1, 1); glVertex3f(-1, 1, 1); glVertex3f(-1, 1, -1);
-        glVertex3f(1, -1, -1); glVertex3f(1, 1, -1); glVertex3f(1, 1, 1); glVertex3f(1, -1, 1);
-        glEnd();
+        DrawUnitCube();
 
-        // Wireframe outline
+        // Wireframe outline (unlit so every edge has the same brightness)
+        glDisable(GL_LIGHTING);
         glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
-        glColor3ub(200, 200, 200);
+        glColor3ub(170, 170, 180);
         glLineWidth(2);
-        glBegin(GL_QUADS);
-        glVertex3f(-1, -1, -1); glVertex3f(1, -1, -1); glVertex3f(1, -1, 1); glVertex3f(-1, -1, 1);
-        glVertex3f(-1, 1, -1); glVertex3f(-1, 1, 1); glVertex3f(1, 1, 1); glVertex3f(1, 1, -1);
-        glVertex3f(-1, -1, 1); glVertex3f(1, -1, 1); glVertex3f(1, 1, 1); glVertex3f(-1, 1, 1);
-        glVertex3f(-1, -1, -1); glVertex3f(-1, 1, -1); glVertex3f(1, 1, -1); glVertex3f(1, -1, -1);
-        glVertex3f(-1, -1, -1); glVertex3f(-1, -1, 1); glVertex3f(-1, 1, 1); glVertex3f(-1, 1, -1);
-        glVertex3f(1, -1, -1); glVertex3f(1, 1, -1); glVertex3f(1, 1, 1); glVertex3f(1, -1, 1);
-        glEnd();
+        DrawUnitCube();
         glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
         glLineWidth(1);
+        glEnable(GL_LIGHTING);
 
         glPopMatrix();
     }
 
+    // Ship labels so it's always clear which ship is yours
+    if (vsBot) {
+        if (players[0].alive) DrawShipLabel(players[0].x, players[0].z, "YOU", 0, 255, 255);
+        if (players[1].alive) DrawShipLabel(players[1].x, players[1].z, "BOT", 255, 50, 50);
+    }
+    else if (isMultiplayer && (NetGetPlayerId() == 0 || NetGetPlayerId() == 1)) {
+        int me = NetGetPlayerId();
+        if (players[0].alive)
+            DrawShipLabel(players[0].x, players[0].z, me == 0 ? "YOU" : player1Name, 0, 255, 255);
+        if (players[1].alive)
+            DrawShipLabel(players[1].x, players[1].z, me == 1 ? "YOU" : player2Name, 255, 50, 50);
+    }
+
+    float arenaX, arenaBottom;
+    if (!WorldToScreen(0.0f, 0.0f, WORLD_SIZE, arenaX, arenaBottom)) arenaBottom = mH;
+
     // HUD
     Begin2D(mW, mH);
 
-    // Center dashed line
+    // Center dashed line: from below the timer/round/ping text down to the arena border
     glColor3ub(50, 50, 50);
     glLineWidth(2);
     float dashLen = mH * 0.02f;
     float gapLen = mH * 0.015f;
     float centerX = mW * 0.5f;
-    float yy = 0.0f;
+    float yy = 200.0f;
     glBegin(GL_LINES);
-    while (yy < mH) {
+    while (yy + dashLen < arenaBottom) {
         glVertex2f(centerX, yy);
         glVertex2f(centerX, yy + dashLen);
         yy += dashLen + gapLen;
@@ -1019,23 +1173,16 @@ void Game::SpecialKeys(int key, int state) {
     (void)key; (void)state;
 
     if (currentState == STATE_MAIN_MENU) {
-        if (key == SDLK_UP)   menuSelection = (menuSelection + 3) % 4;
-        if (key == SDLK_DOWN) menuSelection = (menuSelection + 1) % 4;
-        if (key == SDLK_RETURN || key == SDLK_KP_ENTER) {
-            switch (menuSelection) {
-            case 0: SetState(STATE_NICKNAME); enteringNickname = true; nicknameLen = (int)strlen(nickname); break;
-            case 1: SetState(STATE_RULES);   break;
-            case 2: SetState(STATE_CREDITS); break;
-            case 3: {
-                SDL_Event q;
-                q.type = SDL_QUIT;
-                SDL_PushEvent(&q);
-            } break;
-            }
-        }
+        if (key == SDLK_UP)   menuSelection = (menuSelection + MAIN_MENU_ITEM_COUNT - 1) % MAIN_MENU_ITEM_COUNT;
+        if (key == SDLK_DOWN) menuSelection = (menuSelection + 1) % MAIN_MENU_ITEM_COUNT;
+        if (key == SDLK_RETURN || key == SDLK_KP_ENTER)
+            ActivateMainMenuItem(menuSelection);
     }
     else if (currentState == STATE_RULES || currentState == STATE_CREDITS) {
         if (key == SDLK_ESCAPE) SetState(STATE_MAIN_MENU);
+    }
+    else if (currentState == STATE_MATCH_END && vsBot) {
+        if (key == SDLK_RETURN || key == SDLK_KP_ENTER) StartVsBotMatch();
     }
 }
 void Game::Mouse(int button, int state, int x, int y) {
@@ -1043,25 +1190,28 @@ void Game::Mouse(int button, int state, int x, int y) {
     mMouseX = x; mMouseY = y;
 
     if (currentState == STATE_MAIN_MENU && button == SDL_BUTTON_LEFT && state == SDL_RELEASED) {
-        float bx = mW * 0.3f;
-        float bw = mW * 0.4f;
-        for (int i = 0; i < 4; i++) {
-            float iy = mH * 0.35f + i * mH * 0.1f;
-            float bh = mH * 0.075f;
-            if (x >= bx && x <= bx + bw && y >= iy && y <= iy + bh) {
-                switch (i) {
-                case 0: SetState(STATE_NICKNAME); enteringNickname = true; nicknameLen = (int)strlen(nickname); break;
-                case 1: SetState(STATE_RULES); break;
-                case 2: SetState(STATE_CREDITS); break;
-                case 3: {
-                    SDL_Event q;
-                    q.type = SDL_QUIT;
-                    SDL_PushEvent(&q);
-                } break;
-                }
+        for (int i = 0; i < MAIN_MENU_ITEM_COUNT; i++) {
+            float bx, iy, bw, bh;
+            MainMenuItemRect(mW, mH, i, bx, iy, bw, bh);
+            if (PointInRect(x, y, bx, iy, bw, bh)) {
+                ActivateMainMenuItem(i);
                 break;
             }
         }
+        return;
+    }
+
+    if (currentState == STATE_MATCH_END && vsBot && button == SDL_BUTTON_LEFT && state == SDL_RELEASED) {
+        float bx, by, bw, bh;
+        BotRematchButtonRect(mW, mH, bx, by, bw, bh);
+        if (PointInRect(x, y, bx, by, bw, bh)) {
+            StartVsBotMatch();
+            return;
+        }
+        BotMenuButtonRect(mW, mH, bx, by, bw, bh);
+        if (PointInRect(x, y, bx, by, bw, bh))
+            SetState(STATE_MAIN_MENU);
+        return;
     }
 
     if (currentState == STATE_LOBBY && button == SDL_BUTTON_LEFT && state == SDL_RELEASED) {
@@ -1446,7 +1596,7 @@ InputState Game::BuildInputState(int id) {
         }
     }
     else {
-        // Local singleplayer: P1 = WASD, P2 = IJKL
+        // Offline VS Bot: P1 = WASD, P2 = bot (decided in Update before UpdatePlaying)
         if (id == 0) {
             inp.rotateLeft = keys['a'];
             inp.rotateRight = keys['d'];
@@ -1454,10 +1604,8 @@ InputState Game::BuildInputState(int id) {
             inp.shoot = keys[' '];
         }
         else {
-            inp.rotateLeft = keys['j'];
-            inp.rotateRight = keys['l'];
-            inp.thrustForward = keys['i'];
-            inp.shoot = keys['k'];
+            inp = botInput;
+            inp.playerId = id;
         }
     }
     return inp;
@@ -1709,6 +1857,10 @@ void Game::Update(float dt) {
             }
         }
         else {
+            // Offline VS Bot: the bot sees the state at the start of the frame,
+            // then both ships go through the same UpdatePlaying() as in LAN.
+            if (vsBot)
+                botInput = bot.Think(players[1], players[0], asteroids, dt);
             UpdatePlaying(dt);
         }
         break;
@@ -1789,9 +1941,8 @@ void Game::Update(float dt) {
                 }
             }
         }
-        else {
-            UpdateRoundEnd(dt);
-        }
+        // Offline VS Bot: stay on the result screen until the player picks
+        // REMATCH or MAIN MENU (see Mouse/SpecialKeys).
         break;
 
     default: break;
